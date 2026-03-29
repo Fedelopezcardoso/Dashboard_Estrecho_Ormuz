@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORMUZ SENSE v1.0</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Palette */
+            --bg-deep: #050505;
+            --bg-panel: #0a0a0a;
+            --border-color: #1a1a1a;
+            --text-main: #d1d5db; /* gray-300 */
+            --text-muted: #6b7280; /* gray-500 */
+            
+            --neon-green: #39ff14;
+            --neon-red: #ff073a;
+            --neon-yellow: #ffea00;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-deep); 
+            border-left: 1px solid var(--border-color);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #222; 
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444; 
+        }
+
+        /* Utility classes for accents */
+        .text-neon-green { color: var(--neon-green); }
+        .text-neon-red { color: var(--neon-red); }
+        .text-neon-yellow { color: var(--neon-yellow); }
+
+        .bg-neon-green { background-color: var(--neon-green); color: black; }
+        .bg-neon-red { background-color: var(--neon-red); color: white; }
+        .bg-neon-yellow { background-color: var(--neon-yellow); color: black; }
+
+        .border-neon-green { border-color: var(--neon-green); }
+        .border-neon-red { border-color: var(--neon-red); }
+        .border-neon-yellow { border-color: var(--neon-yellow); }
+
+        /* Map Grid Simulation */
+        .map-grid {
+            background-size: 50px 50px;
+            background-image: 
+                linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+        }
+
+        /* Radar Sweep Animation */
+        .radar-sweep {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 150%;
+            height: 150%;
+            background: conic-gradient(from 0deg, transparent 75%, rgba(57, 255, 20, 0.15) 100%);
+            border-radius: 50%;
+            transform-origin: 0 0;
+            animation: sweep 4s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes sweep {
+            0% { transform: rotate(0deg) translate(-50%, -50%); }
+            100% { transform: rotate(360deg) translate(-50%, -50%); }
+        }
+
+        /* Map Targets */
+        .target-blip {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background-color: var(--neon-green);
+            box-shadow: 0 0 8px var(--neon-green);
+        }
+
+        .target-blip.critical {
+            background-color: var(--neon-red);
+            box-shadow: 0 0 10px var(--neon-red);
+            animation: pulse-red 1s infinite;
+        }
+
+        @keyframes pulse-red {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Layout Elements */
+        .panel-border {
+            border: 1px solid var(--border-color);
+        }
+
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .blink {
+            animation: blinker 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        .blink-fast {
+            animation: blinker 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes blinker {
+            50% { opacity: 0; }
+        }
+
+        /* Scanline Overlay */
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.3;
+        }
+
+        /* Feed Transitions */
+        #alerts-feed > div {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col md:flex-row text-xs md:text-sm antialiased selection:bg-neon-green selection:text-black">
+
+<div class="scanlines"></div>
+
+<!-- Left Sidebar Navigation -->
+<aside class="w-full md:w-64 panel-border flex flex-col bg-[#0a0a0a] z-20 shrink-0">
+    <!-- Branding -->
+    <div class="p-5 panel-border border-t-0 border-l-0 border-r-0">
+        <h1 class="text-xl font-extrabold tracking-wider text-neon-green">ORMUZ SENSE</h1>
+        <div class="flex items-center gap-2 mt-2">
+            <div class="w-2 h-2 bg-neon-green blink"></div>
+            <p class="text-[10px] text-gray-500 uppercase tracking-widest">v1.0.8-SECURE</p>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-grow p-4 space-y-2">
+        <a href="#" class="block px-4 py-3 bg-[#111] border border-gray-700 text-white flex justify-between items-center transition-all hover:bg-[#1a1a1a]">
+            <span class="tracking-widest">[ MAPA ]</span>
+            <span class="text-neon-green text-lg leading-none">■</span>
+        </a>
+        <a href="#" onclick="alert('[!] ACCESO DENEGADO: Requiere credenciales de Comando.'); return false;" class="block px-4 py-3 border border-transparent text-gray-400 hover:text-white hover:border-gray-800 transition-all">
+            <span class="tracking-widest">[ ALERTAS ]</span>
+        </a>
+        <a href="#" onclick="alert('[!] MÓDULO FUERA DE LÍNEA: Componente de Reportes bajo mantenimiento satelital.'); return false;" class="block px-4 py-3 border border-transparent text-gray-400 hover:text-white hover:border-gray-800 transition-all">
+            <span class="tracking-widest">[ REPORTES ]</span>
+        </a>
+        <a href="#" onclick="alert('SYS_AUTH_FAIL: Permisos de Administrador Nivel-4 Requeridos.'); return false;" class="block px-4 py-3 border border-transparent text-gray-400 hover:text-white hover:border-gray-800 transition-all">
+            <span class="tracking-widest">[ CONFIG ]</span>
+        </a>
+    </nav>
+
+    <!-- System Status -->
+    <div class="p-5 panel-border border-b-0 border-l-0 border-r-0 text-[10px] sm:text-xs text-gray-600 space-y-2">
+        <div class="flex justify-between">
+            <span>SYS_STATUS:</span>
+            <span class="text-neon-green font-bold tracking-widest">ONLINE</span>
+        </div>
+        <div class="flex justify-between">
+            <span>UPLINK_ENC:</span>
+            <span class="text-neon-green font-bold tracking-widest">AES-256</span>
+        </div>
+        <div class="flex justify-between">
+            <span>SAT_LINK:</span>
+            <span class="text-neon-yellow font-bold tracking-widest block blink">144ms</span>
+        </div>
+        <div id="clock" class="mt-4 pt-4 border-t border-[#1a1a1a] font-bold text-gray-400 text-sm tracking-widest text-center">
+            00:00:00 UTC
+        </div>
+    </div>
+</aside>
+
+<!-- Main Area -->
+<main class="flex-grow flex flex-col min-w-0 bg-[#050505] relative -ml-[1px]">
+    
+    <!-- Top Header -->
+    <header class="h-16 panel-border border-t-0 border-r-0 flex flex-wrap items-center justify-between px-6 shrink-0 bg-[#0a0a0a] z-10 gap-4">
+        <div class="hidden sm:flex items-center">
+            <h2 class="text-sm md:text-base font-bold tracking-widest text-gray-300">GEO-TACTICAL COMMAND CENTER</h2>
+        </div>
+        <div class="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+            <span class="text-[10px] lg:text-xs text-gray-500 tracking-widest">ESTADO GLOBAL DE RIESGO:</span>
+            <button id="risk-switch" class="px-3 md:px-5 py-1.5 border border-neon-yellow bg-neon-yellow text-black font-extrabold text-[10px] md:text-sm uppercase tracking-widest cursor-pointer hover:bg-transparent hover:text-neon-yellow transition-all outline-none">
+                DEFCON 3 - ELEVADO
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Split -->
+    <div class="flex-grow flex flex-col xl:flex-row min-h-0 -mt-[1px]">
+        
+        <!-- Central Map Visualizer -->
+        <div class="flex-grow relative panel-border border-b-0 border-r-0 border-t-0 overflow-hidden bg-[#020202] map-grid flex items-center justify-center">
+            
+            <!-- Map Layers -->
+            <div class="absolute inset-0 z-0 opacity-80">
+                <div class="radar-sweep"></div>
+                
+                <!-- Abstract Map Geometry (Simulating Strait of Hormuz) -->
+                <svg class="absolute w-full h-full opacity-20 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <!-- Iran Coast -->
+                    <path d="M 0 0 L 40 30 L 60 35 L 75 25 L 100 0 Z" fill="#111" stroke="#333" stroke-width="0.5"/>
+                    <!-- Oman / UAE Coast -->
+                    <path d="M 0 100 L 20 60 L 45 65 L 70 80 L 100 100 Z" fill="#111" stroke="#333" stroke-width="0.5"/>
+                    <path d="M 45 65 L 60 35" stroke="var(--neon-green)" stroke-width="0.2" stroke-dasharray="1 1" class="opacity-30"/>
+                </svg>
+
+                <!-- Blips -->
+                <div class="target-blip top-[40%] left-[30%]"></div>
+                <div class="target-blip top-[45%] left-[50%]"></div>
+                <div class="target-blip top-[32%] left-[60%] opacity-50"></div>
+                <div class="target-blip top-[60%] left-[40%]"></div>
+                
+                <!-- Critical blip -->
+                <div class="target-blip critical top-[38%] left-[55%]"></div>
+                <div class="absolute top-[38%] left-[55%] w-16 h-16 border border-neon-red rounded-full -translate-x-1/2 -translate-y-1/2 opacity-20 animate-ping pointer-events-none"></div>
+
+            </div>
+
+            <!-- Overlays & Controls-->
+            <div class="absolute top-5 left-5 bg-black/80 border border-[#1a1a1a] px-4 py-3 z-10 backdrop-blur-sm">
+                <div class="text-[10px] text-gray-500 mb-1 tracking-widest">ZONA OPERATIVA</div>
+                <div class="text-white font-bold tracking-widest text-sm">ST. ORMUZ / GOLFO PÉRSICO</div>
+                <div class="text-[10px] text-neon-green mt-1 tracking-widest">COORD: 26°34'N 56°15'E</div>
+            </div>
+            
+            <div class="absolute top-5 right-5 z-10">
+                <button id="simulate-ai-btn" class="px-4 py-2 border border-neon-green bg-[#050505] hover:bg-neon-green hover:text-black text-neon-green text-[10px] font-bold uppercase tracking-widest transition-all flex items-center shadow-[0_0_10px_rgba(57,255,20,0.2)]">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    Simular Análisis IA
+                </button>
+            </div>
+        </div>
+
+        <!-- Real-time Intelligence Feed -->
+        <div class="w-full xl:w-[480px] flex flex-col bg-[#0a0a0a] shrink-0 relative z-10 panel-border border-b-0 border-t-0 border-r-0 xl:-ml-[1px]">
+            <div class="p-4 bg-[#111] border-b border-[#1a1a1a]">
+                <h3 class="font-bold text-gray-200 flex justify-between items-center tracking-widest text-xs">
+                    <span>REAL-TIME INTELLIGENCE</span>
+                    <span class="flex items-center gap-2 text-[10px] text-gray-500">
+                        LIVE <span class="w-2 h-2 bg-neon-green block rounded-full blink"></span>
+                    </span>
+                </h3>
+            </div>
+            
+            <div id="alerts-feed" class="flex-grow overflow-y-auto p-4 space-y-4">
+                
+                <!-- Initial Alerts -->
+                <div class="border border-[#1a1a1a] bg-[#050505] p-4 text-xs flex flex-col gap-3 ai-analyzable transition-all duration-300 relative group">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-gray-600 transition-colors duration-300 tag-indicator"></div>
+                    <div class="flex justify-between items-start pl-2">
+                        <span class="text-gray-500 font-bold tracking-wider">18:12:05 UTC</span>
+                        <span class="px-1.5 py-0.5 border border-gray-600 text-gray-400 text-[9px] uppercase tracking-widest ai-tag">PENDIENTE AI</span>
+                    </div>
+                    <div class="text-gray-300 leading-relaxed pl-2 font-mono text-[11px]">
+                        Comportamiento cinemático anómalo en embarcación clase Panamax. Curso intercepta zona de exclusión naval.
+                    </div>
+                    <div class="flex justify-between items-end mt-2 pt-3 border-t border-[#1a1a1a] pl-2">
+                        <div class="flex flex-col gap-1">
+                            <span class="text-[9px] text-gray-500 tracking-widest">FUENTE</span>
+                            <span class="text-[10px] text-white tracking-widest">AIS_SATELLITE</span>
+                        </div>
+                        <span class="risk-badge px-2.5 py-1 bg-[#1a1a1a] text-gray-400 border border-[#333] tracking-widest text-[9px] font-bold">DESCONOCIDO</span>
+                    </div>
+                </div>
+                
+                <div class="border border-neon-yellow bg-[rgba(255,234,0,0.05)] p-4 text-xs flex flex-col gap-3 relative">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-neon-yellow shadow-[0_0_8px_var(--neon-yellow)]"></div>
+                    <div class="flex justify-between items-start pl-2">
+                        <span class="text-gray-500 font-bold tracking-wider">18:05:22 UTC</span>
+                        <span class="px-1.5 py-0.5 border border-neon-yellow text-neon-yellow text-[9px] uppercase tracking-widest font-bold">OSINT</span>
+                    </div>
+                    <div class="text-white leading-relaxed pl-2 font-mono text-[11px]">
+                        Reportes de desvío de ruta de 3 petroleros en la costa de Omán. Incremento de chatter en canales VHF locales.
+                    </div>
+                    <div class="flex justify-between items-end mt-2 pt-3 border-t border-[#1a1a1a] pl-2">
+                        <div class="flex flex-col gap-1">
+                            <span class="text-[9px] text-gray-500 tracking-widest">FUENTE</span>
+                            <span class="text-[10px] text-white tracking-widest">TELEGRAM_SCRAPER</span>
+                        </div>
+                        <span class="px-2.5 py-1 bg-neon-yellow text-black border border-neon-yellow tracking-widest text-[9px] font-bold">ALERTA MEDIA</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Statistics -->
+    <div class="h-auto md:h-[100px] panel-border border-b-0 border-l-0 border-r-0 bg-[#0a0a0a] grid grid-cols-1 md:grid-cols-3 shrink-0 -mt-[1px] relative z-20">
+        
+        <div class="p-4 md:px-6 md:py-4 panel-border border-b-0 border-l-0 border-t-0 flex flex-col justify-center">
+            <div class="text-[10px] text-gray-500 mb-1.5 tracking-widest">BUQUES EN ZONA CRÍTICA</div>
+            <div class="text-3xl font-bold text-white flex items-end gap-3 font-mono">
+                142 
+                <span class="text-xs text-neon-green mb-1.5 px-1.5 py-0.5 bg-[rgba(57,255,20,0.1)] border border-[rgba(57,255,20,0.3)]">
+                    ▼ 4%
+                </span>
+            </div>
+            <div class="w-full bg-[#1a1a1a] h-1 mt-3">
+                <div class="bg-gray-400 h-1" style="width: 65%"></div>
+            </div>
+        </div>
+        
+        <div class="p-4 md:px-6 md:py-4 panel-border border-b-0 border-l-0 border-t-0 flex flex-col justify-center">
+            <div class="text-[10px] text-gray-500 mb-1.5 tracking-widest">INCIDENTES HOY</div>
+            <div class="text-3xl font-bold text-neon-red flex items-end gap-3 font-mono">
+                03 
+                <span class="text-xs text-neon-red mb-1.5 px-1.5 py-0.5 bg-[rgba(255,7,58,0.1)] border border-[rgba(255,7,58,0.3)]">
+                    ▲ 2
+                </span>
+            </div>
+            <div class="flex gap-1 mt-3">
+                <div class="w-1.5 h-1.5 bg-neon-red"></div>
+                <div class="w-1.5 h-1.5 bg-neon-red"></div>
+                <div class="w-1.5 h-1.5 bg-neon-red"></div>
+                <div class="w-1.5 h-1.5 bg-[#333]"></div>
+                <div class="w-1.5 h-1.5 bg-[#333]"></div>
+            </div>
+        </div>
+        
+        <div class="p-4 md:px-6 md:py-4 flex flex-col justify-center relative overflow-hidden bg-[#111]">
+            <div class="absolute right-0 top-0 h-full w-48 bg-gradient-to-l from-[rgba(255,234,0,0.1)] to-transparent pointer-events-none"></div>
+            <div class="text-[10px] text-gray-500 mb-1.5 tracking-widest relative z-10">TENDENCIA DE RIESGO 24H</div>
+            <div class="text-3xl font-bold text-neon-yellow relative z-10 font-mono">
+                +15.4%
+            </div>
+            <!-- Embedded micro chart -->
+            <svg class="absolute bottom-2 right-4 w-24 h-8 opacity-70" viewBox="0 0 100 30" preserveAspectRatio="none">
+                <path d="M 0 30 L 20 25 L 40 28 L 60 15 L 80 18 L 100 5" fill="none" stroke="var(--neon-yellow)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+                <path d="M 0 30 L 20 25 L 40 28 L 60 15 L 80 18 L 100 5 L 100 30 Z" fill="url(#yellow-grad)" opacity="0.2"/>
+                <defs>
+                    <linearGradient id="yellow-grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--neon-yellow)" />
+                        <stop offset="100%" stop-color="transparent" />
+                    </linearGradient>
+                </defs>
+            </svg>
+        </div>
+    </div>
+
+</main>
+
+<script>
+    // --- Clock Initialization ---
+    function updateClock() {
+        const now = new Date();
+        const timeString = now.toISOString().substring(11, 19) + ' UTC';
+        document.getElementById('clock').textContent = timeString;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // --- Risk Status Toggle ---
+    const riskBtn = document.getElementById('risk-switch');
+    const riskLevels = [
+        { text: 'DEFCON 4 - NORMAL', class: 'border-neon-green bg-none text-neon-green hover:bg-neon-green hover:text-black' },
+        { text: 'DEFCON 3 - ELEVADO', class: 'border-neon-yellow bg-neon-yellow text-black hover:bg-transparent hover:text-neon-yellow' },
+        { text: 'DEFCON 2 - CRÍTICO', class: 'border-neon-red bg-neon-red text-white blink hover:bg-transparent hover:text-neon-red' }
+    ];
+    let currentRiskIndex = 1;
+
+    riskBtn.addEventListener('click', () => {
+        // Reset classes
+        riskBtn.className = 'px-3 md:px-5 py-1.5 font-extrabold text-[10px] md:text-sm uppercase tracking-widest cursor-pointer transition-all outline-none border ' + riskLevels[(currentRiskIndex + 1) % riskLevels.length].class;
+        currentRiskIndex = (currentRiskIndex + 1) % riskLevels.length;
+        riskBtn.textContent = riskLevels[currentRiskIndex].text;
+    });
+
+    const alertsFeed = document.getElementById('alerts-feed');
+    
+    let renderedAlertIds = new Set();
+
+    // --- Backend API Integration ---
+    async function fetchAlertsFromBackend() {
+        try {
+            // Using the Bearer token defined in the backend for security. 
+            // Also explicitly using 127.0.0.1 instead of localhost to prevent IPv6 fetch failing on Windows.
+            const response = await fetch('http://127.0.0.1:5000/api/v1/alerts', {
+                method: 'GET',
+                mode: 'cors', // Crucial para que acepte peticiones de diferentes origenes locales
+                headers: {
+                    'Authorization': 'Bearer ORMUZ-SECURE-KEY-2026',
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                console.error(`[ORMUZ SENSE] HTTP Error: ${response.status} ${response.statusText}`);
+                throw new Error('Network response was not ok');
+            }
+            
+            const result = await response.json();
+
+            if (result.status === 'success' && result.data && result.data.length > 0) {
+                
+                // Evitar el "stuttering" borrando todo. Solo insertamos lo que no existe.
+                // Invertimos el array para insertarlos en orden correcto (el backend los manda DESC, iteramos de back to front para prepend)
+                const reversedData = result.data.reverse();
+                
+                reversedData.forEach(alert => {
+                    // Usamos el ID de la base de datos o el timestamp como llave única
+                    const uniqueId = alert.id || alert.timestamp_utc;
+                    
+                    if (!renderedAlertIds.has(uniqueId)) {
+                        const uiAlertData = formatBackendAlert(alert);
+                        const alertEl = createAlertElement(uiAlertData);
+                        // Add AI class if the user wants to simulate AI analysis later on the frontend
+                        if (alert.nivel_riesgo === 'Bajo' || alert.nivel_riesgo === 'Medio') {
+                            alertEl.classList.add('ai-analyzable');
+                        }
+                        // Insert at the top
+                        alertsFeed.insertBefore(alertEl, alertsFeed.firstChild);
+                        renderedAlertIds.add(uniqueId);
+                        
+                        // Opcional: Limpiar del DOM si hay más de 30 para no saturar la memoria
+                        if (alertsFeed.children.length > 30) {
+                            alertsFeed.removeChild(alertsFeed.lastChild);
+                        }
+                    }
+                });
+            } else {
+                 console.log("[ORMUZ SENSE] O el status no es success o data viene vacío.");
+            }
+        } catch (error) {
+            console.error('Error fetching intel from backend:', error.message);
+            // Fallback visual si falla el fetch, inyecta un error rojo temporal solo para debug
+            alertsFeed.innerHTML = `<div class="p-4 text-neon-red border border-neon-red bg-[rgba(255,7,58,0.1)] text-xs font-mono blink">ERROR SYSTEM_LINK: No se pudo enlazar al Backend (Puerto 5000). Revisa CMD/F12.</div>`;
+        }
+    }
+
+    function formatBackendAlert(dbAlert) {
+        // Map risk levels to visual properties
+        let riskCSS = { risk: "DESCONOCIDO", borderColor: "border-[#1a1a1a]", bgColor: "bg-[#050505]", lineColor: "bg-gray-600", badgeClass: "bg-[#1a1a1a] text-gray-400 border-[#333]", typeColor: "border-gray-600 text-gray-400" };
+        
+        switch (dbAlert.nivel_riesgo) {
+            case 'Critico':
+                // Removed the 'blink' class from bgColor to make the text readable.
+                riskCSS = { risk: "CRÍTICO", borderColor: "border-neon-red", bgColor: "bg-[rgba(255,7,58,0.06)]", lineColor: "bg-neon-red shadow-[0_0_8px_var(--neon-red)]", badgeClass: "bg-neon-red text-white border-neon-red blink-fast", typeColor: "border-neon-red text-neon-red" };
+                break;
+            case 'Medio':
+                riskCSS = { risk: "ELEVADO", borderColor: "border-neon-yellow", bgColor: "bg-[rgba(255,234,0,0.03)]", lineColor: "bg-neon-yellow shadow-[0_0_8px_var(--neon-yellow)]", badgeClass: "bg-neon-yellow text-black border-neon-yellow", typeColor: "border-neon-yellow text-neon-yellow" };
+                break;
+            case 'Bajo':
+                riskCSS = { risk: "NORMAL", borderColor: "border-neon-green", bgColor: "bg-[rgba(57,255,20,0.03)]", lineColor: "bg-neon-green shadow-[0_0_8px_var(--neon-green)]", badgeClass: "bg-neon-green text-black border-neon-green", typeColor: "border-neon-green text-neon-green" };
+                break;
+        }
+
+        // Format timestamp safely
+        let timeStr = "UNKNOWN TIME";
+        if (dbAlert.timestamp_utc) {
+             const dateObj = new Date(dbAlert.timestamp_utc);
+             timeStr = isNaN(dateObj.getTime()) ? dbAlert.timestamp_utc : dateObj.toISOString().substring(11, 19) + ' UTC';
+        }
+
+        return {
+            timeStr: timeStr,
+            msg: dbAlert.mensaje_crudo,
+            source: dbAlert.fuente || "UNKNOWN_SOURCE",
+            link: dbAlert.link || "#",
+            type: dbAlert.fuente.includes('Telegram') ? 'OSINT' : 'SIGINT', // rough guess based on source string
+            ...riskCSS
+        };
+    }
+
+    function createAlertElement(alertData) {
+        const div = document.createElement('div');
+        div.className = `border ${alertData.borderColor} ${alertData.bgColor} p-4 text-xs flex flex-col gap-3 relative fade-in`;
+        
+        div.innerHTML = `
+            <div class="absolute top-0 left-0 w-1 h-full ${alertData.lineColor} transition-colors duration-300 tag-indicator"></div>
+            <div class="flex justify-between items-start pl-2">
+                <span class="text-gray-500 font-bold tracking-wider">${alertData.timeStr}</span>
+                <span class="px-1.5 py-0.5 border ${alertData.typeColor} text-[9px] uppercase tracking-widest font-bold ai-tag">${alertData.type}</span>
+            </div>
+            <div class="text-gray-300 leading-relaxed pl-2 font-mono text-[11px]">
+                ${alertData.msg}
+            </div>
+            <div class="flex justify-between items-end mt-2 pt-3 border-t border-[#1a1a1a] pl-2">
+                <div class="flex flex-col gap-1 w-2/3">
+                    <span class="text-[9px] text-gray-500 tracking-widest">FUENTE</span>
+                    ${alertData.link !== '#' 
+                        ? `<a href="${alertData.link}" target="_blank" class="text-[10px] text-blue-400 hover:text-blue-300 underline tracking-widest uppercase transition-colors truncate whitespace-nowrap overflow-hidden block" title="Abrir Intel cruda">${alertData.source} ↗</a>`
+                        : `<span class="text-[10px] text-white tracking-widest uppercase">${alertData.source}</span>`
+                    }
+                </div>
+                <span class="${alertData.badgeClass} px-2.5 py-1 border tracking-widest text-[9px] font-bold risk-badge">REPORTE ${alertData.risk}</span>
+            </div>
+        `;
+        return div;
+    }
+
+    // Refresh data every 5 seconds from the backend
+    fetchAlertsFromBackend();
+    setInterval(fetchAlertsFromBackend, 5000);
+
+    // --- Artificial Intelligence Synthesis Simulation ---
+    const simulateAIBtn = document.getElementById('simulate-ai-btn');
+    
+    simulateAIBtn.addEventListener('click', () => {
+        if(simulateAIBtn.classList.contains('processing')) return;
+        
+        simulateAIBtn.classList.add('processing');
+        const originalContent = simulateAIBtn.innerHTML;
+        
+        // Loading state
+        simulateAIBtn.className = "px-4 py-2 border border-neon-yellow bg-[rgba(255,234,0,0.1)] text-neon-yellow text-[10px] font-bold uppercase tracking-widest transition-all flex items-center";
+        simulateAIBtn.innerHTML = `
+            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-neon-yellow" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            SINTETIZANDO DATOS...
+        `;
+
+        setTimeout(() => {
+            const analyzableAlerts = document.querySelectorAll('.ai-analyzable');
+            
+            analyzableAlerts.forEach(alert => {
+                // Change border and background
+                alert.className = "border border-neon-red bg-[rgba(255,7,58,0.05)] p-4 text-xs flex flex-col gap-3 relative transition-all duration-500 scale-[1.02] shadow-[0_0_15px_rgba(255,7,58,0.1)]";
+                
+                // Update side indicator
+                const indicator = alert.querySelector('.tag-indicator');
+                if (indicator) {
+                    indicator.className = "absolute top-0 left-0 w-1 h-full bg-neon-red shadow-[0_0_8px_var(--neon-red)] transition-all duration-500";
+                }
+                
+                // Update top right tag
+                const tag = alert.querySelector('.ai-tag');
+                if (tag) {
+                    tag.className = "px-1.5 py-0.5 border border-neon-red text-neon-red text-[9px] uppercase tracking-widest font-bold blink-fast";
+                    tag.textContent = 'IA: ANOMALÍA CRÍTICA';
+                }
+
+                // Update risk badge
+                const badge = alert.querySelector('.risk-badge');
+                if (badge) {
+                    badge.className = "px-2.5 py-1 border bg-neon-red text-white border-neon-red tracking-widest text-[9px] font-bold";
+                    badge.textContent = 'RIESGO ALTO';
+                }
+            });
+
+            // Restore button
+            simulateAIBtn.className = "px-4 py-2 border border-neon-green bg-[#050505] hover:bg-neon-green hover:text-black text-neon-green text-[10px] font-bold uppercase tracking-widest transition-all flex items-center shadow-[0_0_10px_rgba(57,255,20,0.2)]";
+            simulateAIBtn.innerHTML = originalContent;
+            simulateAIBtn.classList.remove('processing');
+        }, 1800); // Wait 1.8s for effect
+    });
+</script>
+
+</body>
+</html>
